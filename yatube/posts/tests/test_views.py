@@ -231,7 +231,7 @@ class PostPagesTests(TestCase):
         follow_zero = Follow.objects.filter(author=self.user,
                                             user=self.user2).count()
         self.authorized_client_new.get(reverse(
-         'posts:profile_follow', kwargs={'username': self.user.username}))
+            'posts:profile_follow', kwargs={'username': self.user.username}))
         current_follow = Follow.objects.filter(author=self.user,
                                                user=self.user2).count()
         self.assertEqual(current_follow, follow_zero + 1)
@@ -248,8 +248,8 @@ class PostPagesTests(TestCase):
         before_subscription = Post.objects.filter(
             author__following__user=self.user2).count()
         self.follower.get(reverse(
-         'posts:profile_follow', kwargs={'username': self.user.username}),
-            follow=True)
+            'posts:profile_follow',
+            kwargs={'username': self.user.username}), follow=True)
         after_subscription = Post.objects.filter(
             author__following__user=self.user2).count()
         self.assertEqual(before_subscription + author_posts,
