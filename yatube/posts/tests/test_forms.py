@@ -1,13 +1,13 @@
 import shutil
 import tempfile
 
-
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, override_settings, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from yatube import settings
+
 from ..forms import PostForm
 from ..models import Comment, Post
 
@@ -107,20 +107,5 @@ class PostFormsTests(TestCase):
             data=new_comment_form_data,
             follow=True
         )
-        self.assertEqual(
-            Comment.objects.count(),
-            comments_count + 1,
+        self.assertEqual(Comment.objects.count(), comments_count + 1,
             'Анонимный пользователь может оставлять комментарии')
-
-    def test_comment_created_in_database_guest_user(self):
-        """комментировать посты может только авторизованный пользователь"""
-        new_comment_form_data = {
-            'post': self.post,
-            'author': self.user,
-            'text': 'коммент успешно добавлен'}
-        response = self.client.post(
-            reverse('posts:add_comment', kwargs={'post_id': self.post.id}),
-            data=new_comment_form_data,
-            follow=True
-        )
-

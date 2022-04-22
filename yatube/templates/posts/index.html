@@ -4,9 +4,11 @@
 {% block content %}
 {% load thumbnail %}
       <div class="container py-5">
-        <h1>Последние обновления на сайте</h1>
+        <h1>{{ title }}</h1>
         <article>
-          {% cache 20 index_page %}
+        {% if user.is_authenticated %}
+        {% include 'posts/includes/switcher.html' %}
+        {% endif %}
           {% for post in page_obj %}
           <ul>
             <li>
@@ -37,7 +39,6 @@
         </article>
           {% if not forloop.last %}<hr>{% endif %}
           {% endfor %}
-          {% endcache %}
       {% include 'posts/includes/paginator.html' %}
       </div>
 {% endblock content %}

@@ -1,18 +1,18 @@
+import shutil
 import tempfile
 import time
-import shutil
 
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, override_settings, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from yatube import settings
 from yatube.settings import PAGINATOR_PAGE_LIST
 
-from ..models import Group, Post
+from ..models import Follow, Group, Post
 
 User = get_user_model()
 
@@ -25,6 +25,8 @@ class PostPagesTests(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = User.objects.create_user(username='TestUser')
+        cls.user2 = User.objects.create_user(username='follow_test_user')
+        cls.user3 = User.objects.create_user(username='no_follow_test_user')
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test-slug',
@@ -65,6 +67,7 @@ class PostPagesTests(TestCase):
     def setUp(self):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        cache.clear()
 
     def test_pages_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
@@ -172,6 +175,7 @@ class PostPagesTests(TestCase):
                     kwargs={'username': self.user.username}) + '?page=2'))
         posts_per_page1 = PAGINATOR_PAGE_LIST
         posts_per_page2 = Post.objects.count() - PAGINATOR_PAGE_LIST
+        cache.clear()
         tests_pages = {
             index_response: index_page_two,
             group_response: group_page_two,
@@ -218,3 +222,41 @@ class PostPagesTests(TestCase):
         response_clear = self.authorized_client.get(
             reverse('posts:index')).content
         self.assertNotEqual(response, response_clear)
+
+    def test_follow_add_and_delete(self):
+        """Авторизованный пользователь может подписываться
+         на других пользователей и удалять их из подписок."""
+        self.authorized_client_new = Client()
+        self.authorized_client_new.force_login(self.user2)
+        follow_zero = Follow.objects.filter(author=self.user,
+                                            user=self.user2).count()
+        self.authorized_client_new.get(reverse(
+         'posts:profile_follow', kwargs={'username': self.user.username}))
+        current_follow = Follow.objects.filter(author=self.user,
+                                               user=self.user2).count()
+        self.assertEqual(current_follow, follow_zero + 1)
+        self.authorized_client_new.get(reverse(
+            'posts:profile_unfollow', kwargs={'username': self.user.username}))
+        self.assertEqual(current_follow - 1, follow_zero)
+
+    def test_new_posts_after_follow(self):
+        """Новая запись пользователя появляется в ленте тех,
+         кто на него подписан и не появляется в ленте тех, кто не подписан."""
+        self.follower = Client()
+        self.follower.force_login(self.user2)
+        author_posts = Post.objects.filter(author=self.user).count()
+        before_subscription = Post.objects.filter(
+            author__following__user=self.user2).count()
+        self.follower.get(reverse(
+         'posts:profile_follow', kwargs={'username': self.user.username}),
+            follow=True)
+        after_subscription = Post.objects.filter(
+            author__following__user=self.user2).count()
+        self.assertEqual(before_subscription + author_posts,
+                         after_subscription)
+        self.no_follower = Client()
+        self.no_follower.force_login(self.user3)
+        self.no_follower.get(reverse('posts:follow_index'))
+        no_follow_posts = Post.objects.filter(
+            author__following__user=self.user3).count()
+        self.assertEqual(no_follow_posts, 0)

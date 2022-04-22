@@ -1,11 +1,13 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.cache import cache_page
 
 from .forms import CommentForm, PostForm
 from .models import Comment, Follow, Group, Post, User
 from .utils import paginator_page_obj
 
 
+@cache_page(20)
 def index(request):
     post_list = Post.objects.all().order_by('-pub_date')
     page_obj = paginator_page_obj(request, post_list)
@@ -31,15 +33,22 @@ def group_posts(request, slug):
 
 
 def profile(request, username):
-    template = 'posts/profile.html'
-    user = get_object_or_404(User, username=username)
-    post_list = Post.objects.filter(author=user).order_by('-pub_date')
-    page_obj = paginator_page_obj(request, post_list)
+    author = get_object_or_404(User, username=username)
+    posts = author.posts.order_by('-pub_date')
+    page_obj = paginator_page_obj(request, posts)
+    following = False
+    if request.user.is_authenticated:
+        follows = Follow.objects.filter(user=request.user, author=author)
+        if follows:
+            following = True
+        else:
+            following = False
     context = {
+        'author': author,
         'page_obj': page_obj,
-        'author': user,
+        'following': following,
     }
-    return render(request, template, context)
+    return render(request, 'posts/profile.html', context)
 
 
 def post_detail(request, post_id):
@@ -108,26 +117,30 @@ def add_comment(request, post_id):
 def follow_index(request):
     post_list = Post.objects.filter(author__following__user=request.user)
     template = 'posts/follow.html'
+    title = 'Ваши избранные авторы'
     page_obj = paginator_page_obj(request, post_list)
     context = {
-        'page_obj': page_obj
+        'page_obj': page_obj,
+        'title': title,
     }
     return render(request, template, context)
 
 
 @login_required
 def profile_follow(request, username):
-    if username != request.user.username:
-        Follow.objects.create(user=request.user,
-                              author=User.objects.get(username=username))
-        return redirect('posts:follow_index')
-    return redirect('posts:index')
+    # подписка
+    author = get_object_or_404(User, username=username)
+    if Follow.objects.filter(
+            author=author,
+            user=request.user).exists() or request.user == author:
+        return redirect('posts:index')
+    Follow.objects.create(user=request.user,
+                          author=User.objects.get(username=username))
+    return redirect('posts:follow_index')
 
 
 @login_required
 def profile_unfollow(request, username):
     # Дизлайк, отписка
-    Follow.objects.filter(user=request.user,
-                          author=User.objects.get(username=username)
-                          ).delete()
+    Follow.objects.get(user=request.user, author__username=username).delete()
     return redirect('posts:follow_index')
