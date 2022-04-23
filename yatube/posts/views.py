@@ -9,7 +9,8 @@ from .utils import paginator_page_obj
 
 @cache_page(20)
 def index(request):
-    post_list = Post.objects.all().order_by('-pub_date')
+    post_list = Post.objects.select_related('group').all().order_by(
+        '-pub_date')
     page_obj = paginator_page_obj(request, post_list)
     template = 'posts/index.html'
     title = "Последние обновления на сайте"
@@ -38,7 +39,8 @@ def profile(request, username):
     page_obj = paginator_page_obj(request, posts)
     following = False
     if request.user.is_authenticated:
-        follows = Follow.objects.filter(user=request.user, author=author)
+        follows = Follow.objects.filter(user=request.user,
+                                        author=author).exists()
         if follows:
             following = True
         else:
@@ -115,7 +117,8 @@ def add_comment(request, post_id):
 
 @login_required
 def follow_index(request):
-    post_list = Post.objects.filter(author__following__user=request.user)
+    post_list = Post.objects.filter(
+        author__following__user=request.user).order_by('-pub_date')
     template = 'posts/follow.html'
     title = 'Ваши избранные авторы'
     page_obj = paginator_page_obj(request, post_list)
@@ -128,19 +131,16 @@ def follow_index(request):
 
 @login_required
 def profile_follow(request, username):
-    # подписка
     author = get_object_or_404(User, username=username)
-    if Follow.objects.filter(
-            author=author,
-            user=request.user).exists() or request.user == author:
-        return redirect('posts:index')
-    Follow.objects.create(user=request.user,
-                          author=User.objects.get(username=username))
-    return redirect('posts:follow_index')
+    if request.user != author:
+        Follow.objects.get_or_create(user=request.user, author=author)
+        return redirect('posts:follow_index')
+    return redirect('posts:index')
 
 
 @login_required
 def profile_unfollow(request, username):
-    # Дизлайк, отписка
-    Follow.objects.get(user=request.user, author__username=username).delete()
+    unfollow_username = get_object_or_404(User, username=username)
+    Follow.objects.filter(user=request.user,
+                          author__username=unfollow_username).delete()
     return redirect('posts:follow_index')
